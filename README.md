@@ -4,6 +4,49 @@ Minimum user interface to control the Thymio Device Manager. Adds a menu with a 
 
 The Thymio Device Manager doesn't require any modification.
 
+## Prerequisites
+
+### macOS
+
+- macOS with Xcode Command Line Tools or Xcode installed. This provides `make`, `swiftc`, `codesign`, `ditto`, `hdiutil`, `xcrun`, `stapler`, and `spctl`.
+- A built macOS `thymio-device-manager` executable at `mac/thymio-device-manager`. The Makefile copies this file into the generated `.app` bundle.
+- For signed releases outside the Mac App Store, an Apple Developer account, a `Developer ID Application` certificate in the keychain, and a notarytool keychain profile.
+
+Install the Xcode Command Line Tools with:
+
+```sh
+xcode-select --install
+```
+
+### Windows
+
+- .NET 8 SDK or a newer .NET SDK that can target `net8.0-windows`.
+- Network access on first restore/build so NuGet packages and Windows targeting/runtime packs can be downloaded when needed.
+- A Windows `thymio-device-manager.exe` at `win/thymio-device-manager.exe` if you want the build to copy it next to `TDMLauncher.exe`.
+- Windows is required to run the generated launcher, even when cross-building it from macOS or Linux.
+
+### Linux
+
+- GNU Make.
+- A C compiler such as `gcc`.
+- `pkg-config`.
+- GTK 3 development headers and libraries, including GLib/GIO.
+- A Linux `thymio-device-manager` executable at `linux/thymio-device-manager` if you want the Makefile to copy it next to the launcher in `linux/build/`.
+- A desktop environment with tray/status icon support for normal runtime behavior.
+
+Common distro package commands:
+
+```sh
+# Debian/Ubuntu
+sudo apt install build-essential pkg-config libgtk-3-dev
+
+# Fedora
+sudo dnf install gcc make pkgconf-pkg-config gtk3-devel
+
+# Arch Linux
+sudo pacman -S base-devel pkgconf gtk3
+```
+
 ## macOS
 
 The application is implemented in Swift. As a command-line program, it can be compiled with the `swiftc` compiler. It expects a command `thymio-device-manager` in the same directory. This can be bundled as a standard self-contained Mac application in a `.app` directory.
@@ -97,7 +140,7 @@ At startup, the Linux launcher starts its own `thymio-device-manager` subprocess
 
 ## Building on Windows
 
-Install the .NET 8 SDK, then run:
+With the Windows prerequisites installed, run:
 
 ```sh
 dotnet build win/TDMLauncher.csproj -c Release
@@ -129,7 +172,7 @@ The resulting executable is still a Windows program and must be run on Windows.
 
 ## Building on Linux
 
-Install the GTK 3 development package for your distribution, then run:
+With the Linux prerequisites installed, run:
 
 ```sh
 make -C linux
