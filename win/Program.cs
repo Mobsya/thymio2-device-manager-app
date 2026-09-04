@@ -29,15 +29,12 @@ public class MainForm: System.Windows.Forms.Form
 
 	public MainForm()
     {
-		System.Windows.Forms.ContextMenu contextMenu = new System.Windows.Forms.ContextMenu();
-		System.Windows.Forms.MenuItem menuItemExit = new System.Windows.Forms.MenuItem();
+		System.Windows.Forms.ContextMenuStrip contextMenu = new System.Windows.Forms.ContextMenuStrip();
+		System.Windows.Forms.ToolStripMenuItem menuItemExit = new System.Windows.Forms.ToolStripMenuItem();
 
-        contextMenu.MenuItems.AddRange(
-            new System.Windows.Forms.MenuItem[] {menuItemExit});
-
-        menuItemExit.Index = 0;
         menuItemExit.Text = "E&xit";
         menuItemExit.Click += new System.EventHandler(this.Exit);
+        contextMenu.Items.Add(menuItemExit);
 
 		// window title, in case it appears somewhere (window itself is hidden by OnLoad)
 		this.Text = TDMLauncher.Properties.Resources.TDMName;
@@ -46,7 +43,7 @@ public class MainForm: System.Windows.Forms.Form
 		notifyIcon = new System.Windows.Forms.NotifyIcon(this.components);
 
 		notifyIcon.Icon = TDMLauncher.Properties.Resources.Thymio;
-		notifyIcon.ContextMenu = contextMenu;
+		notifyIcon.ContextMenuStrip = contextMenu;
 		notifyIcon.Text = TDMLauncher.Properties.Resources.TDMName;
 		notifyIcon.Visible = true;
 	}

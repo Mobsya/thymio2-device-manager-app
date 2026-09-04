@@ -13,23 +13,23 @@
 *.tmp
 *.temp
 
-# Linux build output
-/linux/thymio-2-device-manager
+# Platform build directories
+/linux/build/
+/mac/build/
+/win/build/
 
-# macOS build and release outputs
+# Legacy in-place build outputs
+/linux/thymio-2-device-manager
 /mac/thymio-2-device-manager
-/mac/thymio-device-manager
 /mac/Thymio 2 Device Manager.app/
 /mac/dmg-root/
 /mac/thymio-2-device-manager.dmg
 /mac/thymio-2-device-manager-notarization.zip
 /mac/*.dSYM/
-
-# Windows/.NET build and publish outputs
 /win/bin/
 /win/obj/
-/win/thymio-device-manager
-/win/thymio-device-manager.exe
+
+# Windows/.NET user and debug files
 /win/*.pdb
 /win/*.user
 /win/*.suo

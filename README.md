@@ -25,7 +25,8 @@ usually means the app was copied into a `.dmg` without the full Apple release fl
 3. Submit the app or disk image to Apple's notary service with `xcrun notarytool`.
 4. Staple the notarization ticket to the final `.app` and `.dmg`.
 
-The `mac/Makefile` includes helper targets for this flow. First, store your notary credentials in the keychain once:
+The `mac/Makefile` includes helper targets for this flow. Generated files are written under `mac/build/`.
+First, store your notary credentials in the keychain once:
 
 ```sh
 xcrun notarytool store-credentials tdm-notary \
@@ -42,7 +43,7 @@ make -C mac release \
   NOTARY_PROFILE="tdm-notary"
 ```
 
-This target signs `thymio-2-device-manager.app`, notarizes and staples it, creates `thymio-2-device-manager.dmg`, signs the DMG, notarizes it, and staples the final disk image.
+This target signs `mac/build/Thymio 2 Device Manager.app`, notarizes and staples it, creates `mac/build/thymio-2-device-manager.dmg`, signs the DMG, notarizes it, and staples the final disk image.
 
 You can also run the steps individually:
 
@@ -80,8 +81,8 @@ security find-identity -v -p codesigning
 To inspect the actual authority and timestamp attached to each executable inside the app:
 
 ```sh
-codesign -dvv mac/thymio-2-device-manager.app/Contents/MacOS/thymio-2-device-manager
-codesign -dvv mac/thymio-2-device-manager.app/Contents/MacOS/thymio-device-manager
+codesign -dvv "mac/build/Thymio 2 Device Manager.app/Contents/MacOS/thymio-2-device-manager"
+codesign -dvv "mac/build/Thymio 2 Device Manager.app/Contents/MacOS/thymio-device-manager"
 ```
 
 ## Windows
@@ -102,7 +103,7 @@ Install the .NET 8 SDK, then run:
 dotnet build win/TDMLauncher.csproj -c Release
 ```
 
-This produces the launcher executable under `win/bin/Release/net8.0-windows/`.
+This produces the launcher executable under `win/build/bin/Release/net8.0-windows/`.
 
 ## Publishing a distributable `.exe`
 
@@ -115,7 +116,7 @@ dotnet publish win/TDMLauncher.csproj -c Release -r win-x86 --self-contained tru
 The published executable is written under:
 
 ```text
-win/bin/Release/net8.0-windows/win-x86/publish/
+win/build/bin/Release/net8.0-windows/win-x86/publish/
 ```
 
 The launcher expects `thymio-device-manager.exe` in the same directory as `TDMLauncher.exe`.
@@ -134,8 +135,9 @@ Install the GTK 3 development package for your distribution, then run:
 make -C linux
 ```
 
-This produces the launcher executable under `linux/`.
+This produces the launcher executable under `linux/build/`.
 
 The launcher expects `thymio-device-manager` in the same directory as `thymio-2-device-manager`.
+If `linux/thymio-device-manager` exists when building, the Makefile copies it into `linux/build/`.
 
 On some Linux desktop environments, tray icon support depends on the desktop shell configuration or an installed tray extension.

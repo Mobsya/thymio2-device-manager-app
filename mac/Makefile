@@ -5,28 +5,32 @@
 
 SRC = thymio-2-device-manager.swift
 SWIFTC ?= swiftc
-APP_EXECUTABLE = thymio-2-device-manager
+BUILD_DIR ?= build
+APP_EXECUTABLE_NAME = thymio-2-device-manager
+APP_EXECUTABLE = $(BUILD_DIR)/$(APP_EXECUTABLE_NAME)
 APP_DISPLAY_NAME = Thymio 2 Device Manager
-APP_BUNDLE = Thymio\ 2\ Device\ Manager.app
-APP_BUNDLE_PATH = $(APP_DISPLAY_NAME).app
-DMG_NAME = $(APP_EXECUTABLE).dmg
-DMG_ROOT = dmg-root
+APP_BUNDLE_PATH = $(BUILD_DIR)/$(APP_DISPLAY_NAME).app
+DMG_NAME = $(BUILD_DIR)/$(APP_EXECUTABLE_NAME).dmg
+DMG_ROOT = $(BUILD_DIR)/dmg-root
 DMG_VOLNAME ?= Thymio 2 Device Manager
 APP_SIGN_IDENTITY ?=
 NOTARY_PROFILE ?=
-NOTARY_ZIP = $(APP_EXECUTABLE)-notarization.zip
+NOTARY_ZIP = $(BUILD_DIR)/$(APP_EXECUTABLE_NAME)-notarization.zip
 
-.PHONY: all clean dmg-root sign-app verify-app notarize-app staple-app \
+.PHONY: all app clean dmg-root sign-app verify-app notarize-app staple-app \
 	create-dmg sign-dmg verify-dmg notarize-dmg staple-dmg release
 
-all: $(APP_BUNDLE)
+all: app
 
-$(APP_EXECUTABLE): $(SRC)
-	$(SWIFTC) -o $@ $^
+$(BUILD_DIR):
+	mkdir -p "$@"
 
-# $(APP_BUNDLE): assume a complete (statically-linked) tdm is available
+$(APP_EXECUTABLE): $(SRC) | $(BUILD_DIR)
+	$(SWIFTC) -o "$@" $^
+
+# app: assume a complete (statically-linked) tdm is available
 # in this directory as thymio-device-manager.
-$(APP_BUNDLE): $(APP_EXECUTABLE) thymio-device-manager Info.plist AppIcon.icns
+app: $(APP_EXECUTABLE) thymio-device-manager Info.plist AppIcon.icns | $(BUILD_DIR)
 	rm -Rf "$(APP_BUNDLE_PATH)"
 	mkdir -p "$(APP_BUNDLE_PATH)/Contents/MacOS"
 	mkdir -p "$(APP_BUNDLE_PATH)/Contents/Resources"
@@ -37,13 +41,13 @@ $(APP_BUNDLE): $(APP_EXECUTABLE) thymio-device-manager Info.plist AppIcon.icns
 
 sign-app:
 	codesign --force --timestamp --sign "$(APP_SIGN_IDENTITY)" "$(APP_BUNDLE_PATH)/Contents/MacOS/thymio-device-manager"
-	codesign --force --timestamp --sign "$(APP_SIGN_IDENTITY)" "$(APP_BUNDLE_PATH)/Contents/MacOS/$(APP_EXECUTABLE)"
+	codesign --force --timestamp --sign "$(APP_SIGN_IDENTITY)" "$(APP_BUNDLE_PATH)/Contents/MacOS/$(APP_EXECUTABLE_NAME)"
 	codesign --force --deep --options runtime --timestamp --sign "$(APP_SIGN_IDENTITY)" "$(APP_BUNDLE_PATH)"
 
 verify-app:
 	codesign --verify --deep --strict --verbose=2 "$(APP_BUNDLE_PATH)"
-	codesign -dvv "$(APP_BUNDLE_PATH)/Contents/MacOS/$(APP_EXECUTABLE)" 2>&1 | grep -q "Authority=Developer ID Application:"
-	codesign -dvv "$(APP_BUNDLE_PATH)/Contents/MacOS/$(APP_EXECUTABLE)" 2>&1 | grep -q "^Timestamp="
+	codesign -dvv "$(APP_BUNDLE_PATH)/Contents/MacOS/$(APP_EXECUTABLE_NAME)" 2>&1 | grep -q "Authority=Developer ID Application:"
+	codesign -dvv "$(APP_BUNDLE_PATH)/Contents/MacOS/$(APP_EXECUTABLE_NAME)" 2>&1 | grep -q "^Timestamp="
 	codesign -dvv "$(APP_BUNDLE_PATH)/Contents/MacOS/thymio-device-manager" 2>&1 | grep -q "Authority=Developer ID Application:"
 	codesign -dvv "$(APP_BUNDLE_PATH)/Contents/MacOS/thymio-device-manager" 2>&1 | grep -q "^Timestamp="
 	spctl --assess --type execute --verbose=4 "$(APP_BUNDLE_PATH)"
@@ -55,10 +59,10 @@ dmg-root:
 	ln -s /Applications "$(DMG_ROOT)/Applications"
 
 create-dmg:
-	hdiutil create -volname "$(DMG_VOLNAME)" -srcfolder $(DMG_ROOT) -ov -format UDZO $(DMG_NAME)
+	hdiutil create -volname "$(DMG_VOLNAME)" -srcfolder "$(DMG_ROOT)" -ov -format UDZO "$(DMG_NAME)"
 
 sign-dmg:
-	codesign --force --timestamp --sign "$(APP_SIGN_IDENTITY)" $(DMG_NAME)
+	codesign --force --timestamp --sign "$(APP_SIGN_IDENTITY)" "$(DMG_NAME)"
 
 notarize-dmg:
 	test -n "$(NOTARY_PROFILE)" || (echo "Set NOTARY_PROFILE to a notarytool keychain profile." && false)
@@ -84,7 +88,7 @@ staple-app:
 
 
 release:
-	$(MAKE) $(APP_BUNDLE)
+	$(MAKE) app
 	$(MAKE) sign-app
 	$(MAKE) verify-app
 # Optionally notarize the app here
@@ -96,4 +100,4 @@ release:
 	$(MAKE) verify-dmg
 
 clean:
-	rm -Rf "$(APP_BUNDLE_PATH)" "$(DMG_ROOT)" "$(DMG_NAME)" "$(NOTARY_ZIP)" "$(APP_EXECUTABLE)"
+	rm -Rf "$(BUILD_DIR)"
