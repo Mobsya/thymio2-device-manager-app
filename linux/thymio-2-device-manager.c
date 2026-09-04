@@ -10,10 +10,19 @@
 #include <gtk/gtk.h>
 #include <gio/gio.h>
 
+#ifndef APP_VERSION
+#define APP_VERSION "1.0.0"
+#endif
+
+#ifndef APP_BUILD
+#define APP_BUILD "1"
+#endif
+
 typedef struct {
     GtkApplication *app;
     GtkStatusIcon *status_icon;
     GtkWidget *menu;
+    GtkWidget *about_dialog;
     GSubprocess *process;
     gboolean held;
     gboolean quitting;
@@ -142,6 +151,68 @@ static void on_menu_quit(GtkMenuItem *menu_item, gpointer user_data)
     request_quit(state);
 }
 
+static void on_about_dialog_destroy(GtkWidget *dialog, gpointer user_data)
+{
+    AppState *state = user_data;
+
+    if (state->about_dialog == dialog) {
+        state->about_dialog = NULL;
+    }
+}
+
+static void on_about_dialog_response(
+    GtkDialog *dialog,
+    gint response_id,
+    gpointer user_data
+)
+{
+    (void) response_id;
+    (void) user_data;
+
+    gtk_widget_destroy(GTK_WIDGET(dialog));
+}
+
+static void on_menu_about(GtkMenuItem *menu_item, gpointer user_data)
+{
+    AppState *state = user_data;
+    GtkWidget *dialog;
+    GdkPixbuf *logo;
+    gchar *version;
+    (void) menu_item;
+
+    if (state->about_dialog != NULL) {
+        gtk_window_present(GTK_WINDOW(state->about_dialog));
+        return;
+    }
+
+    dialog = gtk_about_dialog_new();
+    state->about_dialog = dialog;
+
+    version = APP_BUILD[0] == '\0'
+        ? g_strdup(APP_VERSION)
+        : g_strdup_printf("%s (%s)", APP_VERSION, APP_BUILD);
+    logo = create_icon(TRUE);
+
+    gtk_window_set_application(GTK_WINDOW(dialog), state->app);
+    gtk_about_dialog_set_program_name(
+        GTK_ABOUT_DIALOG(dialog),
+        "Thymio 2 Device Manager"
+    );
+    gtk_about_dialog_set_version(GTK_ABOUT_DIALOG(dialog), version);
+    gtk_about_dialog_set_copyright(
+        GTK_ABOUT_DIALOG(dialog),
+        "Copyright 2026, Mobsya and École Polytechnique Fédérale de Lausanne (EPFL)."
+    );
+    gtk_about_dialog_set_logo(GTK_ABOUT_DIALOG(dialog), logo);
+
+    g_free(version);
+    g_object_unref(logo);
+
+    g_signal_connect(dialog, "response", G_CALLBACK(on_about_dialog_response), state);
+    g_signal_connect(dialog, "destroy", G_CALLBACK(on_about_dialog_destroy), state);
+    gtk_window_present(GTK_WINDOW(dialog));
+}
+
 static void popup_menu(AppState *state, guint button, guint activate_time)
 {
     gtk_menu_popup(
@@ -229,6 +300,10 @@ static void on_shutdown(GApplication *app, gpointer user_data)
         g_clear_object(&state->status_icon);
     }
 
+    if (state->about_dialog != NULL) {
+        gtk_widget_destroy(state->about_dialog);
+    }
+
     if (state->menu != NULL) {
         gtk_widget_destroy(state->menu);
         state->menu = NULL;
@@ -238,6 +313,8 @@ static void on_shutdown(GApplication *app, gpointer user_data)
 static void on_activate(GApplication *app, gpointer user_data)
 {
     AppState *state = user_data;
+    GtkWidget *about_item;
+    GtkWidget *separator;
     GtkWidget *quit_item;
 
     if (state->status_icon != NULL) {
@@ -248,6 +325,11 @@ static void on_activate(GApplication *app, gpointer user_data)
     state->held = TRUE;
 
     state->menu = gtk_menu_new();
+    about_item = gtk_menu_item_new_with_label("About");
+    g_signal_connect(about_item, "activate", G_CALLBACK(on_menu_about), state);
+    gtk_menu_shell_append(GTK_MENU_SHELL(state->menu), about_item);
+    separator = gtk_separator_menu_item_new();
+    gtk_menu_shell_append(GTK_MENU_SHELL(state->menu), separator);
     quit_item = gtk_menu_item_new_with_label("Quit Thymio Device Manager");
     g_signal_connect(quit_item, "activate", G_CALLBACK(on_menu_quit), state);
     gtk_menu_shell_append(GTK_MENU_SHELL(state->menu), quit_item);

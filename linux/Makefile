@@ -9,10 +9,13 @@ BUILD_DIR ?= build
 BIN_NAME = thymio-2-device-manager
 BIN = $(BUILD_DIR)/$(BIN_NAME)
 TDM_EXECUTABLE = thymio-device-manager
+APP_VERSION ?= 1.0.0
+APP_BUILD ?= 1
 PKG_CONFIG ?= pkg-config
 PKGS = gtk+-3.0 gio-2.0
 PKG_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(PKGS))
 PKG_LIBS := $(shell $(PKG_CONFIG) --libs $(PKGS))
+CPPFLAGS += -DAPP_VERSION=\"$(APP_VERSION)\" -DAPP_BUILD=\"$(APP_BUILD)\"
 
 .PHONY: all clean copy-tdm
 
@@ -22,7 +25,7 @@ $(BUILD_DIR):
 	mkdir -p "$@"
 
 $(BIN): $(SRC) | $(BUILD_DIR)
-	$(CC) -o "$@" $^ $(PKG_CFLAGS) $(PKG_LIBS)
+	$(CC) $(CPPFLAGS) -o "$@" $^ $(PKG_CFLAGS) $(PKG_LIBS)
 
 copy-tdm: | $(BUILD_DIR)
 	@if [ -f "$(TDM_EXECUTABLE)" ]; then cp "$(TDM_EXECUTABLE)" "$(BUILD_DIR)/$(TDM_EXECUTABLE)"; fi

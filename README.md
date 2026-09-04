@@ -1,6 +1,6 @@
 # TDM Launcher
 
-Minimum user interface to control the Thymio Device Manager. Adds a menu with a Quit or Exit entry as a status item on macOS or a tray item on Windows and Linux. The TDM is launched as a subprocess, and the launcher only terminates the subprocess it started.
+Minimum user interface to control the Thymio Device Manager. Adds a menu with About and Quit or Exit entries as a status item on macOS or a tray item on Linux; Windows provides an Exit entry. The TDM is launched as a subprocess, and the launcher only terminates the subprocess it started.
 
 The Thymio Device Manager doesn't require any modification.
 
@@ -134,7 +134,7 @@ The application is implemented in C# as a WinForms app targeting the modern .NET
 
 ## Linux
 
-The Linux launcher is implemented in C with GTK 3. It follows the same minimal style as the macOS app: a tray icon, a single Quit action, and a child process for `thymio-device-manager`.
+The Linux launcher is implemented in C with GTK 3. It follows the same minimal style as the macOS app: a tray icon, About and Quit actions, and a child process for `thymio-device-manager`.
 
 At startup, the Linux launcher starts its own `thymio-device-manager` subprocess. It does not kill existing `thymio-device-manager` processes or remove lock files that may belong to another instance.
 
