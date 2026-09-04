@@ -1,0 +1,41 @@
+# macOS Finder metadata
+.DS_Store
+
+# Editor and IDE local state
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+
+# Linux build output
+/linux/thymio-2-device-manager
+
+# macOS build and release outputs
+/mac/thymio-2-device-manager
+/mac/thymio-device-manager
+/mac/Thymio 2 Device Manager.app/
+/mac/dmg-root/
+/mac/thymio-2-device-manager.dmg
+/mac/thymio-2-device-manager-notarization.zip
+/mac/*.dSYM/
+
+# Windows/.NET build and publish outputs
+/win/bin/
+/win/obj/
+/win/thymio-device-manager
+/win/thymio-device-manager.exe
+/win/*.pdb
+/win/*.user
+/win/*.suo
+/win/.vs/
+
+# NuGet/package artifacts
+*.nupkg
+*.snupkg
+packages/
