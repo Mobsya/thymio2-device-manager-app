@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        if command -v udevadm >/dev/null 2>&1 &&
+            udevadm control --reload-rules >/dev/null 2>&1; then
+            for product in 000a 000c; do
+                udevadm trigger --action=change --subsystem-match=usb \
+                    --attr-match=idVendor=0617 --attr-match=idProduct="$product" \
+                    >/dev/null 2>&1 || true
+            done
+        fi
+        ;;
+esac
+
+exit 0

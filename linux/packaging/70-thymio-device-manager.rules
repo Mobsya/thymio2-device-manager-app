@@ -1,0 +1,4 @@
+# Thymio II and wireless dongles: allow the active local desktop user USB access.
+
+SUBSYSTEM=="usb", ATTR{idVendor}=="0617", ATTR{idProduct}=="000a", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0617", ATTR{idProduct}=="000c", TAG+="uaccess"

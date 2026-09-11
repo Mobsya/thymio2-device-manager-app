@@ -1,0 +1,12 @@
+# Ubuntu 26.04 LTS with CA certificates available before the first apt download.
+FROM docker.io/library/buildpack-deps:resolute-curl
+
+ARG UBUNTU_MIRROR=https://mirror.init7.net/ubuntu
+RUN sed -i "s|^URIs: .*|URIs: ${UBUNTU_MIRROR}|" /etc/apt/sources.list.d/ubuntu.sources \
+    && apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        build-essential pkg-config libgtk-3-dev libayatana-appindicator3-dev dpkg-dev python3 \
+        desktop-file-utils libavahi-client3 libavahi-common3 libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src/linux

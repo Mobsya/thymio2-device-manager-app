@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Thymio 2 Device Manager
+Comment=Start and control the Thymio Device Manager
+Exec=thymio-2-device-manager
+Icon=thymio-2-device-manager
+Terminal=false
+Categories=Education;
