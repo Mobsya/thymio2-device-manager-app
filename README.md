@@ -152,20 +152,31 @@ This produces the launcher executable under `win/build/bin/Release/net8.0-window
 
 ## Publishing a distributable `.exe`
 
-To publish a Windows x86 build from any machine with the .NET 8 SDK:
+To publish a single-file Windows x86 build from macOS, Linux, or Windows with the .NET 8 SDK or a newer SDK that can target `net8.0-windows`, first place the Windows TDM executable at `win/thymio-device-manager.exe`. A macOS or Linux binary cannot be used in its place.
+
+From the repository root, run:
 
 ```sh
-dotnet publish win/TDMLauncher.csproj -c Release -r win-x86 --self-contained true /p:PublishSingleFile=true
+dotnet publish win/TDMLauncher.csproj \
+  -c Release \
+  -r win-x86 \
+  --self-contained true \
+  -p:PublishSingleFile=true \
+  -p:IncludeAllContentForSelfExtract=true \
+  -p:DebugType=embedded
 ```
 
-The published executable is written under:
+Distribute the resulting executable:
 
 ```text
-win/build/bin/Release/net8.0-windows/win-x86/publish/
+win/build/bin/Release/net8.0-windows/win-x86/publish/TDMLauncher.exe
 ```
 
-The launcher expects `thymio-device-manager.exe` in the same directory as `TDMLauncher.exe`.
-If you place `win/thymio-device-manager.exe` before building or publishing, the project copies it automatically next to the launcher in both outputs.
+This bundles the launcher, the .NET runtime, and `thymio-device-manager.exe` into one file. Users do not need to install .NET or keep a separate TDM executable beside the launcher. The bundled files are automatically extracted to disk at startup, and the launcher starts TDM from the extraction directory.
+
+The Windows TDM executable must be present before publishing; otherwise, the project will omit it from the bundle. Any additional dependencies or drivers required by that TDM build still need to be supplied. Test the published executable on Windows before distribution.
+
+For a regular `dotnet build`, the project instead copies `win/thymio-device-manager.exe` next to the launcher, where it must remain.
 
 ## Cross-building Windows from macOS or Linux
 
