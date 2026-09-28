@@ -35,7 +35,7 @@ class PackageTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
-        self.directory = Path(self.temporary.name)
+        self.directory = Path(self.temporary.name).resolve()
         self.backend = elf_file(self.directory / "thymio-device-manager")
         self.launcher = elf_file(self.directory / PACKAGE)
         self.payload = self.directory / "payload"
@@ -143,8 +143,8 @@ class PackageTests(unittest.TestCase):
         self.assertIn("Version: 1.2.3-4\n", control)
         self.assertIn("Architecture: amd64\n", control)
         self.assertIn("Maintainer: Test Maintainer <maintainer@example.org>\n", control)
-        self.assertIn("Depends: libc6 (>= 2.38), libstdc++6 (>= 14), libavahi-client3, udev\n", control)
-        self.assertFalse((self.payload / "debian").exists())
+        self.assertIn("Depends: libc6 (>= 2.38), libstdc++6 (>= 14), libavahi-client3, udev, avahi-daemon\n", control)
+        self.assertNotIn("debian", [entry.name for entry in self.payload.iterdir()])
         self.assertFalse((self.payload / "etc").exists())
         for path in self.payload.rglob("*"):
             if path.is_symlink():
@@ -159,6 +159,13 @@ class PackageTests(unittest.TestCase):
         self.invoke({"APP_VERSION": "1.2.4", "APP_BUILD": "5"})
         self.assertIn("Version: 1.2.4-5\n", (self.payload / "DEBIAN/control").read_text())
         self.assertTrue((self.directory / f"{PACKAGE}_1.2.4-5_amd64.deb").is_file())
+
+    def test_upstream_metadata_is_included(self):
+        metadata = self.directory / "upstream metadata"
+        metadata.mkdir()
+        (metadata / "VERSION.txt").write_text("2.0.0\n")
+        self.invoke({"TDM_METADATA_DIR": str(metadata)})
+        self.assertEqual((self.payload / "usr/share/doc" / PACKAGE / "tdm/VERSION.txt").read_text(), "2.0.0\n")
 
     def test_preflight_does_not_require_a_built_launcher(self):
         self.launcher.unlink()

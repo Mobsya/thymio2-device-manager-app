@@ -20,11 +20,55 @@ public class MainForm: System.Windows.Forms.Form
 	private Process process;
 
     [STAThread]
-    static void Main()
+    static int Main(string[] args)
     {
+		if (args.Length == 1 && args[0] == "--check-backend")
+			return CheckBackend();
+		if (args.Length != 0)
+			return 2;
 		using (var singleApp = new Mutex(false, "org.mobsya.thymio-2-device-manager"))
 			if (singleApp.WaitOne(TimeSpan.Zero))
 				Application.Run(new MainForm());
+		return 0;
+    }
+
+    private static ProcessStartInfo BackendStartInfo()
+    {
+        return new ProcessStartInfo {
+            FileName = Path.Combine(AppContext.BaseDirectory, TDMLauncher.Properties.Resources.TDMPath),
+            WorkingDirectory = AppContext.BaseDirectory,
+            UseShellExecute = false,
+            WindowStyle = ProcessWindowStyle.Hidden,
+            CreateNoWindow = true
+        };
+    }
+
+    // A diagnostic command also exercises backend discovery after single-file extraction.
+    private static int CheckBackend()
+    {
+        try {
+            var info = BackendStartInfo();
+            info.ArgumentList.Add("--help");
+            info.RedirectStandardOutput = true;
+            info.RedirectStandardError = true;
+            using (var backend = Process.Start(info)) {
+                var stdout = backend.StandardOutput.ReadToEndAsync();
+                var stderr = backend.StandardError.ReadToEndAsync();
+                if (!backend.WaitForExit(15000)) {
+                    backend.Kill(true);
+                    backend.WaitForExit();
+                    Console.Error.WriteLine("Backend help command timed out.");
+                    return 1;
+                }
+                string output = stdout.GetAwaiter().GetResult() + stderr.GetAwaiter().GetResult();
+                Console.Write(output);
+                // TDM intentionally exits with status 1 for --help.
+                return backend.ExitCode == 1 && output.Contains("--help") ? 0 : 1;
+            }
+        } catch (Exception error) {
+            Console.Error.WriteLine(error.Message);
+            return 1;
+        }
     }
 
 	public MainForm()
@@ -50,10 +94,7 @@ public class MainForm: System.Windows.Forms.Form
 
 	private void LaunchTDM()
 	{
-		ProcessStartInfo info = new ProcessStartInfo();
-		info.FileName = Path.Combine(AppContext.BaseDirectory, TDMLauncher.Properties.Resources.TDMPath);
-		info.WindowStyle = ProcessWindowStyle.Hidden;
-		info.CreateNoWindow = true;
+		ProcessStartInfo info = BackendStartInfo();
 
 		try
 		{

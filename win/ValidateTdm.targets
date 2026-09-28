@@ -1,0 +1,38 @@
+<Project>
+  <!-- Runs with the .NET SDK on all hosts; local builds need no Python or PowerShell. -->
+  <UsingTask TaskName="ValidateTdmExecutable" TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Executable ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        try {
+          using (var reader = new BinaryReader(File.OpenRead(Executable))) {
+            if (reader.BaseStream.Length < 64 || reader.ReadUInt16() != 0x5A4D)
+              throw new InvalidDataException("Missing DOS header");
+            reader.BaseStream.Position = 60;
+            uint offset = reader.ReadUInt32();
+            reader.BaseStream.Position = offset;
+            if (reader.ReadUInt32() != 0x4550 || reader.ReadUInt16() != 0x8664)
+              throw new InvalidDataException("Expected an x64 PE executable");
+            reader.BaseStream.Position = offset + 22;
+            ushort flags = reader.ReadUInt16();
+            if ((flags & 2) == 0 || (flags & 0x2000) != 0 || reader.ReadUInt16() != 0x20B)
+              throw new InvalidDataException("Expected an x64 executable, not a DLL");
+          }
+        } catch (Exception error) {
+          Log.LogError("Invalid TdmExecutable '{0}': {1}", Executable, error.Message);
+          return false;
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
+  <Target Name="ValidateTdm" BeforeTargets="PrepareForBuild;ComputeFilesToPublish">
+    <ValidateTdmExecutable Executable="$(_TdmExecutablePath)" />
+    <Error Condition="'$(TdmMetadataDir)' != '' And !Exists('$(TdmMetadataDir)')"
+           Text="TdmMetadataDir does not exist: $(TdmMetadataDir)" />
+  </Target>
+</Project>

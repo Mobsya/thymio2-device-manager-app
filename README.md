@@ -9,7 +9,8 @@ The Thymio Device Manager doesn't require any modification.
 ### macOS
 
 - macOS with Xcode Command Line Tools or Xcode installed. This provides `make`, `swiftc`, `codesign`, `ditto`, `hdiutil`, `xcrun`, `stapler`, and `spctl`.
-- A built macOS `thymio-device-manager` executable at `mac/thymio-device-manager`. The Makefile copies this file into the generated `.app` bundle.
+- Python 3.9+ for validating and copying the supplied backend.
+- A built macOS `thymio-device-manager` executable at `mac/thymio-device-manager`, or supplied using `TDM_EXECUTABLE`. The Makefile copies this file into the generated `.app` bundle.
 - For signed releases outside the Mac App Store, an Apple Developer account, a `Developer ID Application` certificate in the keychain, and a notarytool keychain profile.
 
 Install the Xcode Command Line Tools with:
@@ -22,30 +23,86 @@ xcode-select --install
 
 - .NET 8 SDK or a newer .NET SDK that can target `net8.0-windows`.
 - Network access on first restore/build so NuGet packages and Windows targeting/runtime packs can be downloaded when needed.
-- A Windows `thymio-device-manager.exe` at `win/thymio-device-manager.exe` if you want the build to copy it next to `TDMLauncher.exe`.
+- A Windows x64 `thymio-device-manager.exe` at `win/thymio-device-manager.exe`, or supplied using `TdmExecutable`. Keep any DLLs required by that backend beside it; the build copies them too.
 - Windows is required to run the generated launcher, even when cross-building it from macOS or Linux.
+- The upstream backend requires the Bonjour service and applicable Thymio USB drivers. Bundling `dnssd.dll` supplies the Bonjour client library, not the service.
 
 ### Linux
 
 - GNU Make.
+- Python 3.9+.
 - A C compiler such as `gcc`.
 - `pkg-config`.
 - GTK 3 and Ayatana AppIndicator development headers and libraries, including GLib/GIO.
-- A Linux `thymio-device-manager` executable at `linux/thymio-device-manager` if you want the Makefile to copy it next to the launcher in `linux/build/`.
+- A Linux x64 `thymio-device-manager` executable at `linux/thymio-device-manager`, or supplied using `TDM_EXECUTABLE`, with executable permissions.
 - A graphical desktop session. AppIndicator support enables the optional tray icon.
 
 Common distro package commands:
 
 ```sh
 # Debian/Ubuntu
-sudo apt install build-essential pkg-config libgtk-3-dev libayatana-appindicator3-dev
+sudo apt install build-essential python3 pkg-config libgtk-3-dev libayatana-appindicator3-dev
 
 # Fedora
-sudo dnf install gcc make pkgconf-pkg-config gtk3-devel libayatana-appindicator-gtk3-devel
+sudo dnf install gcc make python3 pkgconf-pkg-config gtk3-devel libayatana-appindicator-gtk3-devel
 
 # Arch Linux
-sudo pacman -S base-devel pkgconf gtk3 libayatana-appindicator
+sudo pacman -S base-devel python pkgconf gtk3 libayatana-appindicator
 ```
+
+## Quick local builds
+
+Ordinary builds use the executable you supply. They never download TDM, consult
+GitHub releases, or require Apple credentials. Existing default locations still
+work:
+
+```sh
+make -C mac
+make -C linux
+dotnet build win/TDMLauncher.csproj -c Release
+```
+
+To test another backend without replacing the checked-in executable:
+
+```sh
+make -C mac TDM_EXECUTABLE="/absolute/path/my backend/thymio-device-manager"
+make -C linux TDM_EXECUTABLE="/absolute/path/my backend/thymio-device-manager"
+dotnet build win/TDMLauncher.csproj -c Release \
+  -p:TdmExecutable="/absolute/path/my backend/thymio-device-manager.exe"
+```
+
+Run only the command for your platform. Relative backend paths are resolved from
+the respective `mac`, `linux`, or `win` directory. The source can have any
+filename: builds copy it under the canonical name the launcher expects.
+Windows also copies neighboring `*.dll` files. Keep each backend's dependencies
+in its own source directory; use a fresh build directory or `dotnet clean` when
+switching between backends with different DLL sets.
+
+Missing files, incompatible executable formats, and missing Unix executable
+permissions cause an error instead of silently substituting another backend.
+The supplied binary is copied unchanged; Mac release signing changes only the
+bundled copy. Normal Mac builds compile the launcher for the host architecture
+and ad-hoc sign the launcher without Developer ID credentials. When the supplied
+backend is signed, the app bundle is also ad-hoc signed; an unsigned backend is
+preserved and the local app bundle is left unsealed. Choose a
+backend compatible with that Mac (or an Intel backend where Rosetta is available).
+
+The same overrides work with `make -C mac dmg`, `make -C linux deb`,
+`make -C linux deb-podman`, and `dotnet publish`. For example, create a local
+Mac disk image without notarization:
+
+```sh
+make -C mac dmg TDM_EXECUTABLE="/absolute/path/to/thymio-device-manager"
+```
+
+For a universal Mac launcher, add `UNIVERSAL=1`; this requires a universal backend
+containing both Intel and Apple Silicon code. Local compilation still requires
+the installed platform SDKs/libraries, and a first .NET restore needs NuGet access.
+
+`VERSION.txt` supplies the default wrapper version. `APP_VERSION` and `APP_BUILD`
+can override Mac/Linux metadata; `-p:AppVersion=1.2.3` overrides Windows metadata.
+`TDM_VERSION` is used only by the explicit release downloader, never by ordinary
+local builds.
 
 ## macOS
 
@@ -87,6 +144,19 @@ make -C mac release \
 ```
 
 This target signs `mac/build/Thymio 2 Device Manager.app`, notarizes and staples it, creates `mac/build/thymio-2-device-manager.dmg`, signs the DMG, notarizes it, and staples the final disk image.
+
+Add `UNIVERSAL=1` and a universal `TDM_EXECUTABLE` to produce the same architecture
+coverage as CI. For App Store Connect API authentication instead of Apple ID,
+create the local profile with:
+
+```sh
+xcrun notarytool store-credentials tdm-notary \
+  --key /path/to/AuthKey.p8 --key-id YOUR_KEY_ID --issuer YOUR_ISSUER_ID
+```
+
+Omit `--issuer` for an individual API key. `NOTARY_KEYCHAIN` can select an explicit
+keychain containing the profile. Signing and notarization run only through the
+explicit signing targets or `release`, never through a normal local build.
 
 You can also run the steps individually:
 
@@ -152,14 +222,14 @@ This produces the launcher executable under `win/build/bin/Release/net8.0-window
 
 ## Publishing a distributable `.exe`
 
-To publish a single-file Windows x86 build from macOS, Linux, or Windows with the .NET 8 SDK or a newer SDK that can target `net8.0-windows`, first place the Windows TDM executable at `win/thymio-device-manager.exe`. A macOS or Linux binary cannot be used in its place.
+To publish a single-file Windows x64 build from macOS, Linux, or Windows with the .NET 8 SDK or a newer SDK that can target `net8.0-windows`, first place the Windows TDM executable and its DLLs at `win/thymio-device-manager.exe`, or pass `-p:TdmExecutable="/path/to/backend.exe"`. A macOS or Linux binary cannot be used in its place.
 
 From the repository root, run:
 
 ```sh
 dotnet publish win/TDMLauncher.csproj \
   -c Release \
-  -r win-x86 \
+  -r win-x64 \
   --self-contained true \
   -p:PublishSingleFile=true \
   -p:IncludeAllContentForSelfExtract=true \
@@ -169,12 +239,18 @@ dotnet publish win/TDMLauncher.csproj \
 Distribute the resulting executable:
 
 ```text
-win/build/bin/Release/net8.0-windows/win-x86/publish/TDMLauncher.exe
+win/build/bin/Release/net8.0-windows/win-x64/publish/TDMLauncher.exe
 ```
 
-This bundles the launcher, the .NET runtime, and `thymio-device-manager.exe` into one file. Users do not need to install .NET or keep a separate TDM executable beside the launcher. The bundled files are automatically extracted to disk at startup, and the launcher starts TDM from the extraction directory.
+This bundles the launcher, the .NET runtime, `thymio-device-manager.exe`, and its neighboring DLLs into one file. Users do not need to install .NET or keep a separate TDM executable beside the launcher. The bundled files are automatically extracted to disk at startup, and the launcher starts TDM from the extraction directory.
 
-The Windows TDM executable must be present before publishing; otherwise, the project will omit it from the bundle. Any additional dependencies or drivers required by that TDM build still need to be supplied. Test the published executable on Windows before distribution.
+The Windows TDM executable must be present before building or publishing;
+validation fails if it is missing or is not a Windows x64 executable. Bonjour
+service and USB drivers still need to be installed separately. Test the published
+executable on Windows before distribution. The diagnostic command
+`TDMLauncher.exe --check-backend` checks discovery, extraction, and DLL loading by
+running the backend's `--help` command without opening the tray application.
+It returns zero on success (TDM itself returns one for `--help`).
 
 For a regular `dotnet build`, the project instead copies `win/thymio-device-manager.exe` next to the launcher, where it must remain.
 
@@ -194,13 +270,14 @@ make -C linux
 This produces the launcher executable under `linux/build/`.
 
 The launcher expects `thymio-device-manager` in the same directory as `thymio-2-device-manager`.
-If `linux/thymio-device-manager` exists when building, the Makefile copies it into `linux/build/`.
+The Makefile requires the supplied backend and copies it into `linux/build/`.
 
 On some Linux desktop environments, AppIndicator support depends on the desktop shell configuration or an installed tray extension. The status window works without a tray, including on Wayland.
 
 ## Building a Debian package
 
-Packages target **Ubuntu 24.04+ and Debian 13+ on x86-64**. From Arch Linux or
+Release packages target **Ubuntu 26.04 on x86-64**. Older Ubuntu and Debian
+releases are not promised to work with the upstream backend. From Arch Linux or
 Manjaro, use the Podman target to compile and package inside Ubuntu 26.04 LTS while
 keeping the resulting `.deb` in your local checkout.
 
@@ -263,15 +340,15 @@ Install the build and packaging prerequisites:
 ```sh
 sudo apt update
 sudo apt install build-essential pkg-config libgtk-3-dev libayatana-appindicator3-dev dpkg-dev python3 \
-  desktop-file-utils libavahi-client3 libavahi-common3 libstdc++6
+  desktop-file-utils libavahi-client3 libavahi-common3 avahi-daemon libstdc++6
 ```
 
 Place the Linux x86-64 `thymio-device-manager` executable at
 `linux/thymio-device-manager`, with its executable bit set. Packaging requires
 this file and copies it unchanged. Both the launcher and the backend must have
 all their required shared libraries and symbols available on the build machine.
-The current backend requires recent glibc and C++ runtime libraries; Ubuntu 22.04,
-Debian 12, and ARM builds are outside this package's supported targets.
+The upstream backend requires Ubuntu 26.04-era glibc and C++ runtime libraries;
+older distributions and ARM builds are outside the release package's supported targets.
 
 Build without `sudo`, supplying the release maintainer's name and email:
 
@@ -282,11 +359,11 @@ make -C linux deb \
 ```
 
 This produces `linux/build/thymio-2-device-manager_1.0.0-1_amd64.deb`.
-`APP_VERSION` and `APP_BUILD` default to `1.0.0` and `1`; `DEB_MAINTAINER` is
+`APP_VERSION` defaults to `VERSION.txt` and `APP_BUILD` to `1`; `DEB_MAINTAINER` is
 required. Use a non-empty Debian revision for `APP_BUILD`, such as `1` or `2`.
 The launcher is rebuilt each time to keep its About dialog synchronized with
 these values. Runtime dependencies are generated from both executables using
-`dpkg-shlibdeps`, and include an explicit dependency on `udev`. Packaging fails
+`dpkg-shlibdeps`, and include explicit dependencies on `udev` and `avahi-daemon`. Packaging fails
 if dependency analysis finds missing libraries or unresolved symbols.
 
 ### Installing and launching
@@ -382,9 +459,110 @@ dpkg-deb --info linux/build/thymio-2-device-manager_1.0.0-1_amd64.deb
 dpkg-deb --contents linux/build/thymio-2-device-manager_1.0.0-1_amd64.deb
 ```
 
-Before distributing a release, install it on Ubuntu 26.04, Ubuntu 24.04, and Debian 13, upgrade
+Before distributing a release, install it on Ubuntu 26.04, upgrade
 it with a higher `APP_BUILD`, then remove and purge it. Check the application-menu
 entry, About version, and Quit behavior. On desktops with hardware, verify that
 both `0617:000a` and `0617:000c` are usable without `sudo`, including when connected
 before installation. Verify package installation in an offline environment where
 udev is not running as well.
+
+## GitHub Actions releases
+
+The `Build apps and draft release` workflow runs when a `v*` wrapper tag is pushed,
+or manually from the Actions page. Manual runs on a branch produce Actions
+artifacts, including an ad-hoc Mac image. Tag runs require Apple signing secrets
+and create a **draft** GitHub release only after all platform checks pass.
+Manually selecting an existing release tag uses the same signed release flow.
+
+The version files have separate purposes:
+
+| File | Purpose |
+| --- | --- |
+| `VERSION.txt` | Wrapper version, numeric `major.minor.patch`; tag must be `v<version>` |
+| `TDM_VERSION` | Pinned upstream release version, without the leading `v` |
+
+The initial backend pin is `1.0.0`. The upstream release must be **published**,
+with these assets, before the workflow can succeed:
+
+```text
+thymio-device-manager-1.0.0-macos-universal.tar.gz
+thymio-device-manager-1.0.0-windows-x64.zip
+thymio-device-manager-1.0.0-linux-x64.tar.gz
+SHA256SUMS
+```
+
+Downloads come from [Mobsya/thymio-device-manager releases](https://github.com/Mobsya/thymio-device-manager/releases).
+Missing assets, checksum mismatches, incompatible binaries, unsafe archive entries,
+and missing upstream notices fail the build. CI never falls back to the
+checked-in backend executables for a release package.
+
+To explicitly fetch a backend for local use, choose a new staging directory:
+
+```sh
+python3 scripts/fetch_tdm.py --platform macos-universal --output .build/tdm-macos
+make -C mac UNIVERSAL=1 \
+  TDM_EXECUTABLE="$PWD/.build/tdm-macos/bin/thymio-device-manager" \
+  TDM_METADATA_DIR="$PWD/.build/tdm-macos/metadata"
+```
+
+Use `linux-x64` or `windows-x64` for the other platforms. The downloader refuses
+to replace an existing output directory. Each extracted package includes a
+`metadata` directory with upstream notices, version, provenance, and the verified
+archive checksum. Mac/Linux packaging accepts `TDM_METADATA_DIR`; Windows
+accepts `-p:TdmMetadataDir=...`. CI includes these files in every release package.
+
+### Apple credentials
+
+Configure these **Actions secrets** in the wrapper repository; never commit them:
+
+| Secret | Value |
+| --- | --- |
+| `MACOS_CERTIFICATE_P12` | Base64-encoded Developer ID Application `.p12`, including its private key |
+| `MACOS_CERTIFICATE_PASSWORD` | Password protecting the `.p12` |
+| `APPLE_API_KEY_P8` | Contents of the App Store Connect `.p8` private key |
+| `APPLE_API_KEY_ID` | API key ID |
+| `APPLE_API_ISSUER_ID` | Issuer ID for a team API key; leave unset for an individual key |
+
+Set the **Actions variable** `MACOS_SIGN_IDENTITY` to the complete certificate
+identity, such as `Developer ID Application: Mobsya (TEAMID)`.
+The workflow imports the certificate into a temporary keychain, signs both
+executables and the app, notarizes/staples the app and DMG, and removes temporary
+credentials even if a build fails. No Apple ID password or provisioning profile
+is needed for this flow. A tag build never silently substitutes an unsigned Mac
+package when credentials are missing.
+
+### Publishing a wrapper version
+
+1. Publish the desired upstream TDM release and set `TDM_VERSION` to its version.
+2. Set `VERSION.txt` to the wrapper version and commit the changes.
+3. Push the matching wrapper tag, for example:
+
+   ```sh
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+
+4. Review the resulting draft's DMG, Windows EXE, Debian package, checksums, and
+   recorded wrapper/backend versions. Test robot detection and Quit on real
+   hardware before publishing the draft.
+
+Rerunning the same tag can update an existing draft. The workflow refuses to
+overwrite a published release; create a new wrapper version for subsequent
+changes. Upstream updates are explicit changes to `TDM_VERSION`, not automatic
+tracking of the latest release. Windows outputs are unsigned; Bonjour service
+and USB drivers remain prerequisites.
+
+### Automated checks
+
+Run the platform-independent checks locally:
+
+```sh
+python3 -B -m unittest discover -s scripts/tests -p 'test_*.py'
+python3 -B -m unittest discover -s linux/packaging -p 'test_*.py'
+```
+
+CI also builds with the default backend and renamed external backend paths,
+checks switching binaries and rejecting invalid paths, runs Linux GUI tests under
+Xvfb, inspects the Debian payload and dependencies, and tests Windows single-file
+extraction in a clean directory. It mounts and tests the final Mac image on both
+Intel and ARM runners. Hosted runners cannot check physical USB hardware.
