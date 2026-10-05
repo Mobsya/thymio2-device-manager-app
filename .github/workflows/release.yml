@@ -1,0 +1,211 @@
+name: Build apps and draft release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wrapper-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-26.04
+    outputs:
+      version: ${{ steps.versions.outputs.version }}
+      tdm_version: ${{ steps.versions.outputs.tdm_version }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - id: versions
+        run: python scripts/release.py prepare
+
+  build:
+    needs: prepare
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            platform: macos-universal
+          - os: windows-2022
+            platform: windows-x64
+          - os: ubuntu-26.04
+            platform: linux-x64
+    env:
+      APP_VERSION: ${{ needs.prepare.outputs.version }}
+      APP_BUILD: '1'
+      DEB_MAINTAINER: Mobsya <mobsya@mobsya.org>
+      DOTNET_NOLOGO: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v5
+        if: runner.os == 'Windows'
+        with:
+          dotnet-version: '8.0.x'
+      - name: Linux build and test prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libgtk-3-dev libayatana-appindicator3-dev \
+            dpkg-dev desktop-file-utils libavahi-client3 libavahi-common3 avahi-daemon \
+            libstdc++6 dbus-daemon xvfb xauth
+      - name: Test download and release helpers
+        run: python -B -m unittest discover -s scripts/tests -p 'test_*.py'
+      - name: Download and verify pinned backend
+        run: python scripts/fetch_tdm.py --platform ${{ matrix.platform }} --output .build/tdm
+      - name: Set backend paths
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          package = Path('.build/tdm').resolve()
+          filename = 'thymio-device-manager.exe' if os.name == 'nt' else 'thymio-device-manager'
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+              output.write(f'TDM_EXECUTABLE={package / "bin" / filename}\n')
+              output.write(f'TDM_METADATA_DIR={package / "metadata"}\n')
+          Path('dist').mkdir()
+      - name: Verify independent local builds
+        shell: python
+        env:
+          TARGET_PLATFORM: ${{ matrix.platform }}
+        run: |
+          import os, subprocess, sys
+          subprocess.run([sys.executable, 'scripts/check_local_builds.py',
+                          '--platform', os.environ['TARGET_PLATFORM'],
+                          '--backend', os.environ['TDM_EXECUTABLE']], check=True)
+
+      - name: Test and package Linux
+        if: runner.os == 'Linux'
+        run: |
+          python -B -m unittest discover -s linux/packaging -p 'test_*.py'
+          make -C linux test
+          make -C linux deb
+          package="linux/build/thymio-2-device-manager_${APP_VERSION}-1_amd64.deb"
+          dpkg-deb --info "$package"
+          dpkg-deb --contents "$package"
+          dpkg-deb --field "$package" Depends | grep -F avahi-daemon
+          dpkg-deb --extract "$package" .build/deb-check
+          cmp "$TDM_EXECUTABLE" .build/deb-check/usr/lib/thymio-2-device-manager/thymio-device-manager
+          diff -r "$TDM_METADATA_DIR" .build/deb-check/usr/share/doc/thymio-2-device-manager/tdm
+          python scripts/check_package.py backend .build/deb-check/usr/lib/thymio-2-device-manager/thymio-device-manager
+          cp "$package" dist/
+
+      - name: Publish and verify Windows single-file executable
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          dotnet publish win/thymio-2-device-manager.csproj -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:IncludeAllContentForSelfExtract=true -p:DebugType=embedded `
+            "-p:TdmExecutable=$env:TDM_EXECUTABLE" "-p:TdmMetadataDir=$env:TDM_METADATA_DIR" `
+            -o .build/windows-publish
+          if ($LASTEXITCODE -ne 0) { throw 'Windows publish failed' }
+          python scripts/check_package.py windows .build/windows-publish/thymio-2-device-manager.exe --upstream .build/tdm
+          if ($LASTEXITCODE -ne 0) { throw 'Windows package check failed' }
+          Copy-Item .build/windows-publish/thymio-2-device-manager.exe "dist/thymio-2-device-manager-$env:APP_VERSION-windows-x64.exe"
+
+      - name: Configure Apple signing and notarization
+        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGN_IDENTITY: ${{ vars.MACOS_SIGN_IDENTITY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: bash scripts/setup_macos_signing.sh
+      - name: Build signed and notarized Mac release
+        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          APP_SIGN_IDENTITY: ${{ vars.MACOS_SIGN_IDENTITY }}
+          NOTARY_PROFILE: tdm-ci
+          NOTARY_KEYCHAIN: ${{ runner.temp }}/tdm-signing/signing.keychain-db
+        run: make -C mac release UNIVERSAL=1
+      - name: Build ad-hoc Mac image for manual branch run
+        if: runner.os == 'macOS' && !startsWith(github.ref, 'refs/tags/v')
+        run: make -C mac dmg UNIVERSAL=1
+      - name: Collect Mac image
+        if: runner.os == 'macOS'
+        run: cp mac/build/thymio-2-device-manager.dmg "dist/thymio-2-device-manager-${APP_VERSION}-macos-universal.dmg"
+      - name: Remove Apple credentials
+        if: always() && runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v')
+        run: |
+          security delete-keychain "$RUNNER_TEMP/tdm-signing/signing.keychain-db" || true
+          rm -rf "$RUNNER_TEMP/tdm-signing"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: package-${{ matrix.platform }}
+          path: dist/
+          if-no-files-found: error
+
+  verify-macos:
+    name: Verify Mac image on ${{ matrix.os }}
+    needs: [prepare, build]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    env:
+      APP_VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v7
+        with:
+          name: package-macos-universal
+          path: dist
+      - name: Mount and check packaged app natively
+        run: |
+          image="dist/thymio-2-device-manager-${APP_VERSION}-macos-universal.dmg"
+          mkdir -p "$RUNNER_TEMP/tdm-dmg"
+          hdiutil attach "$image" -mountpoint "$RUNNER_TEMP/tdm-dmg" -nobrowse -readonly
+          options=()
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            codesign --verify --verbose=2 "$image"
+            xcrun stapler validate "$image"
+            spctl --assess --type open --context context:primary-signature "$image"
+            options+=(--signed)
+          fi
+          python scripts/check_package.py macos "$RUNNER_TEMP/tdm-dmg/Thymio 2 Device Manager.app" \
+            --version "$APP_VERSION" "${options[@]}"
+      - name: Unmount image
+        if: always()
+        run: hdiutil detach "$RUNNER_TEMP/tdm-dmg" || true
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [prepare, build, verify-macos]
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: package-*
+          path: dist
+          merge-multiple: true
+      - name: Assemble checksums and create or update draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/release.py publish

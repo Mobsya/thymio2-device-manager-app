@@ -11,6 +11,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+from tdm import copy_metadata
+
 
 PACKAGE = "thymio-2-device-manager"
 LINUX_DIR = Path(__file__).resolve().parent.parent
@@ -64,6 +67,10 @@ def build_with_podman(build_dir, backend, app_version, app_build, maintainer):
 
     output = build_dir / "podman"
     output.mkdir(parents=True, exist_ok=True)
+    metadata_args = []
+    if metadata := os.environ.get("TDM_METADATA_DIR"):
+        metadata_args = ["--volume", f"{Path(metadata).resolve()}:/tdm-metadata:ro",
+                         "--env", "TDM_METADATA_DIR=/tdm-metadata"]
     subprocess.run([
         "podman", "run", "--rm", "--platform=linux/amd64",
         "--userns=keep-id", "--network=none",
@@ -74,6 +81,7 @@ def build_with_podman(build_dir, backend, app_version, app_build, maintainer):
         "--env", f"APP_VERSION={app_version}",
         "--env", f"APP_BUILD={app_build}",
         "--env", f"DEB_MAINTAINER={maintainer}",
+        *metadata_args,
         PODMAN_IMAGE, "make", "deb", "BUILD_DIR=/output", "TDM_EXECUTABLE=/backend",
     ], check=True)
 
@@ -109,6 +117,8 @@ def build_package(build_dir, backend, version, maintainer):
             root / "usr/lib/udev/rules.d/70-thymio-device-manager.rules",
         )
         install(LINUX_DIR.parent / "README.md", root / "usr/share/doc" / PACKAGE / "README.md")
+        if metadata := os.environ.get("TDM_METADATA_DIR"):
+            copy_metadata(metadata, root / "usr/share/doc" / PACKAGE / "tdm")
         for script in ("postinst", "postrm"):
             install(ASSETS / script, root / "DEBIAN" / script, 0o755)
 
@@ -164,7 +174,7 @@ def build_package(build_dir, backend, version, maintainer):
             "Section: education\n"
             "Priority: optional\n"
             f"Maintainer: {maintainer}\n"
-            f"Depends: {depends}, udev\n"
+            f"Depends: {depends}, udev, avahi-daemon\n"
             f"Installed-Size: {installed_size}\n"
             "Homepage: https://github.com/Mobsya/thymio2-device-manager\n"
             "Description: Desktop launcher for the Thymio Device Manager\n"
@@ -187,7 +197,7 @@ def main():
     os.environ["LC_ALL"] = "C"
     os.umask(0o022)
 
-    app_version = os.environ.get("APP_VERSION", "1.0.0")
+    app_version = os.environ.get("APP_VERSION", (LINUX_DIR.parent / "VERSION.txt").read_text().strip())
     app_build = os.environ.get("APP_BUILD", "1")
     maintainer = os.environ.get("DEB_MAINTAINER", "")
     if (
@@ -204,6 +214,9 @@ def main():
     backend = (LINUX_DIR / os.environ.get("TDM_EXECUTABLE", "thymio-device-manager")).resolve()
     build_dir = (LINUX_DIR / os.environ.get("BUILD_DIR", "build")).resolve()
     check_executable(backend)
+    if metadata := os.environ.get("TDM_METADATA_DIR"):
+        if not Path(metadata).is_dir():
+            raise ValueError(f"Missing backend metadata directory: {metadata}")
 
     if args.podman:
         build_with_podman(build_dir, backend, app_version, app_build, maintainer)

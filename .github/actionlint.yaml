@@ -1,0 +1,5 @@
+# GitHub supports this hosted image; actionlint 1.7.12's built-in list lags it.
+# https://docs.github.com/en/actions/reference/runners/github-hosted-runners
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04
