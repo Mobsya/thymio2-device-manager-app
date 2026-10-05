@@ -1,8 +1,8 @@
-# TDM Launcher
+# Thymio 2 Device Manager
 
-Minimum user interface to control the Thymio Device Manager. Adds a menu with About and Quit or Exit entries as a status item on macOS or a tray item on Linux; Windows provides an Exit entry. The TDM is launched as a subprocess, and the launcher only terminates the subprocess it started.
+Thymio 2 Device Manager provides a minimal user interface to control the Thymio Device Manager (TDM) backend. It adds a menu with About and Quit or Exit entries as a status item on macOS or a tray item on Linux; Windows provides an Exit entry. The TDM is launched as a subprocess, and the launcher only terminates the subprocess it started.
 
-The Thymio Device Manager doesn't require any modification.
+The Thymio Device Manager backend doesn't require any modification.
 
 ## Prerequisites
 
@@ -46,6 +46,60 @@ sudo dnf install gcc make pkgconf-pkg-config gtk3-devel libayatana-appindicator-
 # Arch Linux
 sudo pacman -S base-devel pkgconf gtk3 libayatana-appindicator
 ```
+
+## Quick local builds
+
+Ordinary builds use the executable you supply. They never download TDM, consult
+GitHub releases, or require Apple credentials. Existing default locations still
+work:
+
+```sh
+make -C mac
+make -C linux
+dotnet build win/thymio-2-device-manager.csproj -c Release
+```
+
+To test another backend without replacing the checked-in executable:
+
+```sh
+make -C mac TDM_EXECUTABLE="/absolute/path/my backend/thymio-device-manager"
+make -C linux TDM_EXECUTABLE="/absolute/path/my backend/thymio-device-manager"
+dotnet build win/thymio-2-device-manager.csproj -c Release \
+  -p:TdmExecutable="/absolute/path/my backend/thymio-device-manager.exe"
+```
+
+Run only the command for your platform. Relative backend paths are resolved from
+the respective `mac`, `linux`, or `win` directory. The source can have any
+filename: builds copy it under the canonical name the launcher expects.
+Windows also copies neighboring `*.dll` files. Keep each backend's dependencies
+in its own source directory; use a fresh build directory or `dotnet clean` when
+switching between backends with different DLL sets.
+
+Missing files, incompatible executable formats, and missing Unix executable
+permissions cause an error instead of silently substituting another backend.
+The supplied binary is copied unchanged; Mac release signing changes only the
+bundled copy. Normal Mac builds compile the launcher for the host architecture
+and ad-hoc sign the launcher without Developer ID credentials. When the supplied
+backend is signed, the app bundle is also ad-hoc signed; an unsigned backend is
+preserved and the local app bundle is left unsealed. Choose a
+backend compatible with that Mac (or an Intel backend where Rosetta is available).
+
+The same overrides work with `make -C mac dmg`, `make -C linux deb`,
+`make -C linux deb-podman`, and `dotnet publish`. For example, create a local
+Mac disk image without notarization:
+
+```sh
+make -C mac dmg TDM_EXECUTABLE="/absolute/path/to/thymio-device-manager"
+```
+
+For a universal Mac launcher, add `UNIVERSAL=1`; this requires a universal backend
+containing both Intel and Apple Silicon code. Local compilation still requires
+the installed platform SDKs/libraries, and a first .NET restore needs NuGet access.
+
+`VERSION.txt` supplies the default wrapper version. `APP_VERSION` and `APP_BUILD`
+can override Mac/Linux metadata; `-p:AppVersion=1.2.3` overrides Windows metadata.
+`TDM_VERSION` is used only by the explicit release downloader, never by ordinary
+local builds.
 
 ## macOS
 
@@ -145,10 +199,10 @@ At startup, the Linux launcher starts its own `thymio-device-manager` subprocess
 With the Windows prerequisites installed, run:
 
 ```sh
-dotnet build win/TDMLauncher.csproj -c Release
+dotnet build win/thymio-2-device-manager.csproj -c Release
 ```
 
-This produces the launcher executable under `win/build/bin/Release/net8.0-windows/`.
+This produces `thymio-2-device-manager.exe` under `win/build/bin/Release/net8.0-windows/`, with the display name **Thymio 2 Device Manager**.
 
 ## Publishing a distributable `.exe`
 
@@ -157,7 +211,7 @@ To publish a single-file Windows x86 build from macOS, Linux, or Windows with th
 From the repository root, run:
 
 ```sh
-dotnet publish win/TDMLauncher.csproj \
+dotnet publish win/thymio-2-device-manager.csproj \
   -c Release \
   -r win-x86 \
   --self-contained true \
@@ -169,12 +223,18 @@ dotnet publish win/TDMLauncher.csproj \
 Distribute the resulting executable:
 
 ```text
-win/build/bin/Release/net8.0-windows/win-x86/publish/TDMLauncher.exe
+win/build/bin/Release/net8.0-windows/win-x64/publish/thymio-2-device-manager.exe
 ```
 
 This bundles the launcher, the .NET runtime, and `thymio-device-manager.exe` into one file. Users do not need to install .NET or keep a separate TDM executable beside the launcher. The bundled files are automatically extracted to disk at startup, and the launcher starts TDM from the extraction directory.
 
-The Windows TDM executable must be present before publishing; otherwise, the project will omit it from the bundle. Any additional dependencies or drivers required by that TDM build still need to be supplied. Test the published executable on Windows before distribution.
+The Windows TDM executable must be present before building or publishing;
+validation fails if it is missing or is not a Windows x64 executable. Bonjour
+service and USB drivers still need to be installed separately. Test the published
+executable on Windows before distribution. The diagnostic command
+`thymio-2-device-manager.exe --check-backend` checks discovery, extraction, and DLL loading by
+running the backend's `--help` command without opening the tray application.
+It returns zero on success (TDM itself returns one for `--help`).
 
 For a regular `dotnet build`, the project instead copies `win/thymio-device-manager.exe` next to the launcher, where it must remain.
 

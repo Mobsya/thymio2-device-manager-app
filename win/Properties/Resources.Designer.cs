@@ -61,7 +61,7 @@ namespace TDMLauncher.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Thymio Device Manager.
+        ///   Looks up a localized string similar to Thymio 2 Device Manager.
         /// </summary>
         internal static string TDMName {
             get {

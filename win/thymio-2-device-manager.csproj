@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <ApplicationIcon>Resources\Thymio.ico</ApplicationIcon>
+    <RootNamespace>TDMLauncher</RootNamespace>
+    <AssemblyName>thymio-2-device-manager</AssemblyName>
+    <Title>Thymio 2 Device Manager</Title>
+    <AssemblyTitle>$(Title)</AssemblyTitle>
+    <Description>Notification icon with contextual menu to launch and exit the Thymio Device Manager</Description>
+    <Product>Thymio 2 Device Manager</Product>
+    <Copyright>Copyright Mobsya and EPFL, 2026</Copyright>
+    <AppVersion Condition="'$(AppVersion)' == ''">$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)/../VERSION.txt').Trim())</AppVersion>
+    <Version>$(AppVersion)</Version>
+    <AssemblyVersion>$(AppVersion).0</AssemblyVersion>
+    <FileVersion>$(AppVersion).0</FileVersion>
+    <TdmExecutable Condition="'$(TdmExecutable)' == ''">$(MSBuildProjectDirectory)/thymio-device-manager.exe</TdmExecutable>
+    <_TdmExecutablePath>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(TdmExecutable)'))</_TdmExecutablePath>
+    <TdmDirectory>$([System.IO.Path]::GetDirectoryName('$(_TdmExecutablePath)'))</TdmDirectory>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Resources.Extensions" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+    <Compile Update="Properties\Resources.Designer.cs">
+      <AutoGen>true</AutoGen>
+      <DesignTime>true</DesignTime>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="$(_TdmExecutablePath)">
+      <Link>thymio-device-manager.exe</Link>
+      <TargetPath>thymio-device-manager.exe</TargetPath>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+    <Content Include="$(TdmDirectory)/*.dll">
+      <Link>%(Filename)%(Extension)</Link>
+      <TargetPath>%(Filename)%(Extension)</TargetPath>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+    <Content Include="$(TdmMetadataDir)/**/*" Condition="'$(TdmMetadataDir)' != ''">
+      <Link>tdm/%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <TargetPath>tdm/%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+  <Import Project="ValidateTdm.targets" />
+</Project>
